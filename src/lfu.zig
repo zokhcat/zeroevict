@@ -27,7 +27,7 @@ pub fn LFUCache(comptime K: type, comptime V: type) type {
             };
         }
 
-        pub fn get(self: *Self, key: K) ?V {
+        pub fn get(self: *Self, key: K) V {
             const node_ptr = self.key_node.get(key) orelse return null;
             self.increaseFreq(node_ptr);
             return node_ptr.value;
