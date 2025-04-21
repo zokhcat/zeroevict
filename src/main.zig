@@ -1,90 +1,53 @@
 const std = @import("std");
-const clap = @import("clap");
 const LFUCacheMod = @import("lfu.zig");
 
-const SubCommands = enum {
-    help,
-    cache,
-};
-
-const main_parser = .{
-    .command = clap.parsers.enumeration(SubCommands),
-};
-
-const main_params = clap.parseParamsComptime(
-    \\-h, --help Display this and exit
-);
-
-const MainArgs = clap.ResultEx(clap.Help, &main_params, main_parser);
-
-const allocator = std.heap.page_allocator;
-const lfu_cache = LFUCacheMod.LFUCache([]const u8, []const u8).init(&allocator, 3);
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+var allocator = gpa.allocator();
 
 pub fn main() !void {
     std.debug.print("LFU Cache in O(1) \n", .{});
+    const cache = LFUCacheMod.LFUCache([]const u8, []const u8);
+    var _lfu_cache = try cache.init(&allocator, 10);
 
-    var gpa_state = std.heap.GeneralPurposeAllocator(.{}){};
-    const gpa = gpa_state.allocator();
-    defer _ = gpa_state.deinit();
+    const stdout = std.io.getStdOut().writer();
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
 
-    var iter = try std.process.ArgIterator.initWithAllocator(gpa);
-    defer iter.deinit();
-
-    _ = iter.next();
-
-    var diag = clap.Diagnostic{};
-    var res = clap.parseEx(clap.Help, &main_params, main_parser, &iter, .{
-        .diagnostic = &diag,
-        .allocator = gpa,
-    }) catch |err| {
-        diag.report(std.io.getStdErr().writer(), err) catch {};
-        return err;
-    };
-    defer res.deinit();
-
-    if (res.args.help != 0)
-        std.debug.print("--help\n", .{});
-
-    const command = res.positionals[0] orelse return error.MissingCommand;
-    switch (command) {
-        .help => std.debug.print("--help\n", .{}),
-        .cache => try cacheCmd(gpa, &iter, res, &lfu_cache),
-    }
-}
-
-fn cacheCmd(gpa: std.mem.Allocator, iter: *std.process.ArgIterator, main_args: MainArgs, cache: *LFUCacheMod.LFUCache([]const u8, []const u8)) !void {
-    _ = main_args;
-
-    const params = comptime clap.parseParamsComptime(
-        \\-p, --put  Put value inside the cache
-        \\-g, --get  Get value inside the cache
-        \\<[]const u8>
-        \\<[]const u8>
-        \\
-    );
-
-    var diag = clap.Diagnostic{};
-    var res = clap.parseEx(clap.Help, &params, clap.parsers.default, iter, .{
-        .diagnostic = &diag,
-        .allocator = gpa,
-    }) catch |err| {
-        diag.report(std.io.getStdErr().writer(), err) catch {};
-        return err;
-    };
-    defer res.deinit();
-
-    const key = res.positionals[0] orelse return error.MissingArg1;
-    const value = res.positionals[1] orelse return error.MissingArg1;
-    if (res.args.help != 0) {
-        try std.debug.print("--help", .{});
+    if (args.len < 2) {
+        try stdout.print("Usage: <put> key value\n <get> key value", .{});
     }
 
-    if (res.args.put != 0) {
-        try cache.put(key, value);
-    }
+    const command = args[1];
+    if (std.mem.eql(u8, command, "get")) {
+        if (args.len != 3) {
+            try stdout.print("Usage: get <key>\n", .{});
+        }
 
-    if (res.args.get != 0) {
-        const val = try lfu_cache.get(key);
-        std.debug.print("Got: {}\n", .{val});
+        const key = args[2];
+
+        const value = _lfu_cache.get(key) catch {
+            try stdout.print("Key {s} not found\n", .{key});
+            return;
+        };
+        if (std.mem.eql(u8, "", value)) {
+            try stdout.print("Key {s} not found\n", .{key});
+        } else {
+            try stdout.print("Value for key {s}: {s}\n", .{ key, value });
+        }
+    } else if (std.mem.eql(u8, command, "put")) {
+        if (args.len != 4) {
+            try stdout.print("Usage: put <key> <value>\n", .{});
+            return;
+        }
+        const key = args[2];
+        const value = args[3];
+        _lfu_cache.put(key, value) catch |err| {
+            try stdout.print("Error: {}\n", .{err});
+            return;
+        };
+        try stdout.print("Inserted key {s} with value {s}\n", .{ key, value });
+    } else {
+        try stdout.print("Unknown command: {s}\n", .{command});
+        try stdout.print("Available commands: get, put\n", .{});
     }
 }

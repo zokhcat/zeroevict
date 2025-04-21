@@ -2,7 +2,5 @@
     .name = "zero_evict",
     .version = "0.0.1",
     .paths = .{ "build.zig.zon", "build.zig", "src" },
-    .dependencies = .{
-        .clap = .{ .url = "https://github.com/Hejsil/zig-clap/archive/refs/tags/0.9.1.tar.gz", .hash = "122062d301a203d003547b414237229b09a7980095061697349f8bef41be9c30266b" },
-    },
+    .dependencies = .{},
 }

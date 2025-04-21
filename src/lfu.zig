@@ -13,23 +13,23 @@ pub fn LFUCache(comptime K: type, comptime V: type) type {
         size: usize,
         min_freq: usize,
 
-        key_node: std.AutoHashMap(K, *Node),
+        key_node: std.StringHashMap(*Node),
         freq_list: std.AutoHashMap(usize, *List),
 
-        pub fn init(allocator: *std.mem.Allocator, capacity: usize) !LFUCache {
-            return LFUCache{
+        pub fn init(allocator: *std.mem.Allocator, capacity: usize) !Self {
+            return Self{
                 .allocator = allocator,
                 .capacity = capacity,
                 .size = 0,
                 .min_freq = 0,
-                .key_node = std.AutoHashMap(K, *Node).init(allocator),
-                .freq_list = std.AutoHashMap(usize, *List),
+                .key_node = std.StringHashMap(*Node).init(allocator.*),
+                .freq_list = std.AutoHashMap(usize, *List).init(allocator.*),
             };
         }
 
-        pub fn get(self: *Self, key: K) V {
-            const node_ptr = self.key_node.get(key) orelse return null;
-            self.increaseFreq(node_ptr);
+        pub fn get(self: *Self, key: K) !V {
+            const node_ptr = self.key_node.get(key) orelse return error.KeyNotFound;
+            try self.increaseFreq(node_ptr);
             return node_ptr.value;
         }
 
@@ -38,7 +38,7 @@ pub fn LFUCache(comptime K: type, comptime V: type) type {
 
             if (self.key_node.get(key)) |node_ptr| {
                 node_ptr.value = value;
-                self.increaseFreq(node_ptr);
+                try self.increaseFreq(node_ptr);
                 return;
             }
 
@@ -52,8 +52,8 @@ pub fn LFUCache(comptime K: type, comptime V: type) type {
             }
 
             const node = try self.allocator.create(Node);
-            node.* = node.init(key, value);
-            self.key_node.putAssumeCapacity(key, node);
+            node.* = Node.init(key, value);
+            try self.key_node.put(key, node);
 
             var list = try self.getFreqList(1);
             list.append(node);
@@ -62,7 +62,7 @@ pub fn LFUCache(comptime K: type, comptime V: type) type {
             self.size += 1;
         }
 
-        fn increaseFreq(self: *Self, node_ptr: *Node) void {
+        fn increaseFreq(self: *Self, node_ptr: *Node) !void {
             const old_freq = node_ptr.freq;
             const old_list = self.freq_list.get(old_freq) orelse return;
 
