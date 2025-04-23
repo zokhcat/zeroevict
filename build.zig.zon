@@ -1,5 +1,5 @@
 .{
-    .name = "zero_evict",
+    .name = "zeroevict",
     .version = "0.0.1",
     .paths = .{ "build.zig.zon", "build.zig", "src" },
     .dependencies = .{},
